@@ -19,6 +19,10 @@ const (
 	notQueuedIndex = -1
 )
 
+// maxCachedPeersMultiplier peers max limit will be multiplied by this number
+// to get the maximum number of cached peers allowed.
+var maxCachedPeersMultiplier = 2
+
 // NewTopicPool returns instance of TopicPool
 func NewTopicPool(topic discv5.Topic, limits params.Limits, slowMode, fastMode time.Duration, cache *Cache) *TopicPool {
 	pool := TopicPool{
@@ -31,6 +35,7 @@ func NewTopicPool(topic discv5.Topic, limits params.Limits, slowMode, fastMode t
 		discoveredPeersQueue: make(peerPriorityQueue, 0),
 		connectedPeers:       make(map[discv5.NodeID]*peerInfo),
 		cache:                cache,
+		maxCachedPeers:       limits.Max * maxCachedPeersMultiplier,
 	}
 
 	heap.Init(&pool.discoveredPeersQueue)
@@ -52,7 +57,8 @@ type TopicPool struct {
 	poolWG sync.WaitGroup
 	quit   chan struct{}
 
-	running int32
+	running        int32
+	maxCachedPeers int
 
 	currentMode           time.Duration
 	period                chan time.Duration
@@ -61,6 +67,8 @@ type TopicPool struct {
 	pendingPeers         map[discv5.NodeID]*peerInfoItem // contains found and requested to be connected peers but not confirmed
 	discoveredPeersQueue peerPriorityQueue               // priority queue to find the most recently discovered peers; does not containt peers requested to connect
 	connectedPeers       map[discv5.NodeID]*peerInfo     // currently connected peers
+
+	stopSearchTimeout *time.Time
 
 	cache *Cache
 }
@@ -139,6 +147,40 @@ func (t *TopicPool) BelowMin() bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return len(t.connectedPeers) < t.limits.Min
+}
+
+// maxCachedReached returns true if max number of cached peers is reached.
+func (t *TopicPool) maxCachedReached() bool {
+	if t.maxCachedPeers == 0 {
+		return true
+	}
+	peers := t.cache.GetPeersRange(t.topic, t.maxCachedPeers)
+
+	return len(peers) >= t.maxCachedPeers
+}
+
+// setStopSearchTimeout sets the timeout to stop current topic search if it's not
+// been stopped before.
+func (t *TopicPool) setStopSearchTimeout(delay time.Duration) {
+	if t.stopSearchTimeout != nil {
+		return
+	}
+	now := time.Now().Add(delay)
+	t.stopSearchTimeout = &now
+}
+
+// isStopSearchDelayExpired returns true if the timeout to stop current topci
+// search has been accomplished.
+func (t *TopicPool) isStopSearchDelayExpired() bool {
+	if t.stopSearchTimeout == nil {
+		return false
+	}
+	return t.stopSearchTimeout.Before(time.Now())
+}
+
+// readyToStopSearch return true if all conditions to stop search are ok.
+func (t *TopicPool) readyToStopSearch() bool {
+	return t.isStopSearchDelayExpired() || t.maxCachedReached()
 }
 
 // updateSyncMode changes the sync mode depending on the current number
@@ -319,6 +361,7 @@ func (t *TopicPool) StartSearch(server *p2p.Server) error {
 	defer t.mu.Unlock()
 
 	t.quit = make(chan struct{})
+	t.stopSearchTimeout = nil
 
 	// `period` is used to notify about the current sync mode.
 	t.period = make(chan time.Duration, 2)
@@ -413,6 +456,12 @@ func (t *TopicPool) removeServerPeer(server *p2p.Server, info *peerInfo) {
 		info.node.UDP,
 		info.node.TCP,
 	))
+}
+
+func (t *TopicPool) stopped() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.currentMode == 0
 }
 
 // StopSearch stops the closes stop

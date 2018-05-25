@@ -268,3 +268,39 @@ func (s *TopicPoolSuite) TestPeerDontAddTwice() {
 	// peer2 already added to p2p server no reason to add it again
 	s.Nil(s.topicPool.AddPeerFromTable(s.peer))
 }
+
+func (s *TopicPoolSuite) TestMaxCachedPeers() {
+	s.topicPool.limits = params.NewLimits(1, 1)
+	s.topicPool.maxCachedPeers = 3
+	peer1 := discv5.NewNode(discv5.NodeID{1}, s.peer.Self().IP, 32311, 32311)
+	peer2 := discv5.NewNode(discv5.NodeID{2}, s.peer.Self().IP, 32311, 32311)
+	peer3 := discv5.NewNode(discv5.NodeID{3}, s.peer.Self().IP, 32311, 32311)
+	s.topicPool.processFoundNode(s.peer, peer1)
+	s.topicPool.processFoundNode(s.peer, peer2)
+	s.topicPool.processFoundNode(s.peer, peer3)
+	s.topicPool.ConfirmDropped(s.peer, discover.NodeID(peer1.ID))
+	s.topicPool.ConfirmAdded(s.peer, discover.NodeID(peer1.ID))
+	s.topicPool.ConfirmDropped(s.peer, discover.NodeID(peer2.ID))
+	s.topicPool.ConfirmAdded(s.peer, discover.NodeID(peer2.ID))
+	s.topicPool.ConfirmAdded(s.peer, discover.NodeID(peer3.ID))
+
+	s.Equal(3, len(s.topicPool.connectedPeers))
+	s.False(s.topicPool.connectedPeers[peer1.ID].dismissed)
+	s.True(s.topicPool.connectedPeers[peer2.ID].dismissed)
+	s.True(s.topicPool.connectedPeers[peer3.ID].dismissed)
+
+	cached := s.topicPool.cache.GetPeersRange(s.topicPool.topic, 5)
+	s.Equal(3, len(cached))
+
+	s.Equal(peer1.ID, cached[0].ID)
+	s.Equal(peer2.ID, cached[1].ID)
+	s.Equal(peer3.ID, cached[2].ID)
+	s.Contains(s.topicPool.connectedPeers, peer1.ID)
+	s.Contains(s.topicPool.connectedPeers, peer2.ID)
+	s.Contains(s.topicPool.connectedPeers, peer3.ID)
+	s.NotContains(s.topicPool.pendingPeers, peer1.ID)
+	s.NotContains(s.topicPool.pendingPeers, peer2.ID)
+	s.NotContains(s.topicPool.pendingPeers, peer3.ID)
+
+	s.True(s.topicPool.maxCachedReached())
+}
