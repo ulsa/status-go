@@ -25,6 +25,7 @@ func TestTopicPoolSuite(t *testing.T) {
 }
 
 func (s *TopicPoolSuite) SetupTest() {
+	maxCachedPeersMultiplier = 1
 	key, _ := crypto.GenerateKey()
 	name := common.MakeName("peer", "1.0")
 	s.peer = &p2p.Server{
@@ -65,6 +66,7 @@ func (s *TopicPoolSuite) AssertConsumed(channel <-chan time.Duration, expected t
 
 func (s *TopicPoolSuite) TestUsingCache() {
 	s.topicPool.limits = params.NewLimits(1, 1)
+	s.topicPool.maxCachedPeers = 1
 
 	peer1 := discv5.NewNode(discv5.NodeID{1}, s.peer.Self().IP, 32311, 32311)
 	s.topicPool.processFoundNode(s.peer, peer1)
@@ -177,6 +179,7 @@ func (s *TopicPoolSuite) TestRequestedDoesntRemove() {
 	// max limit is 1 because we test that 2nd peer will stay in local table
 	// when we request to drop it
 	s.topicPool.limits = params.NewLimits(1, 1)
+	s.topicPool.maxCachedPeers = 1
 	peer1 := discv5.NewNode(discv5.NodeID{1}, s.peer.Self().IP, 32311, 32311)
 	peer2 := discv5.NewNode(discv5.NodeID{2}, s.peer.Self().IP, 32311, 32311)
 	s.topicPool.processFoundNode(s.peer, peer1)
@@ -195,6 +198,7 @@ func (s *TopicPoolSuite) TestRequestedDoesntRemove() {
 
 func (s *TopicPoolSuite) TestTheMostRecentPeerIsSelected() {
 	s.topicPool.limits = params.NewLimits(1, 1)
+	s.topicPool.maxCachedPeers = 1
 
 	peer1 := discv5.NewNode(discv5.NodeID{1}, s.peer.Self().IP, 32311, 32311)
 	peer2 := discv5.NewNode(discv5.NodeID{2}, s.peer.Self().IP, 32311, 32311)
@@ -220,6 +224,7 @@ func (s *TopicPoolSuite) TestTheMostRecentPeerIsSelected() {
 
 func (s *TopicPoolSuite) TestSelectPeerAfterMaxLimit() {
 	s.topicPool.limits = params.NewLimits(1, 1)
+	s.topicPool.maxCachedPeers = 1
 
 	peer1 := discv5.NewNode(discv5.NodeID{1}, s.peer.Self().IP, 32311, 32311)
 	peer2 := discv5.NewNode(discv5.NodeID{2}, s.peer.Self().IP, 32311, 32311)
@@ -240,6 +245,7 @@ func (s *TopicPoolSuite) TestSelectPeerAfterMaxLimit() {
 
 func (s *TopicPoolSuite) TestReplacementPeerIsCounted() {
 	s.topicPool.limits = params.NewLimits(1, 1)
+	s.topicPool.maxCachedPeers = 1
 
 	peer1 := discv5.NewNode(discv5.NodeID{1}, s.peer.Self().IP, 32311, 32311)
 	peer2 := discv5.NewNode(discv5.NodeID{2}, s.peer.Self().IP, 32311, 32311)
@@ -259,6 +265,7 @@ func (s *TopicPoolSuite) TestReplacementPeerIsCounted() {
 
 func (s *TopicPoolSuite) TestPeerDontAddTwice() {
 	s.topicPool.limits = params.NewLimits(1, 1)
+	s.topicPool.maxCachedPeers = 1
 
 	peer1 := discv5.NewNode(discv5.NodeID{1}, s.peer.Self().IP, 32311, 32311)
 	peer2 := discv5.NewNode(discv5.NodeID{2}, s.peer.Self().IP, 32311, 32311)

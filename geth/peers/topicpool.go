@@ -37,7 +37,6 @@ func NewTopicPool(topic discv5.Topic, limits params.Limits, slowMode, fastMode t
 		cache:                cache,
 		maxCachedPeers:       limits.Max * maxCachedPeersMultiplier,
 	}
-
 	heap.Init(&pool.discoveredPeersQueue)
 
 	return &pool
@@ -433,7 +432,7 @@ func (t *TopicPool) processFoundNode(server *p2p.Server, node *discv5.Node) {
 	}
 
 	// the upper limit is not reached, so let's add this peer
-	if len(t.connectedPeers) < t.limits.Max {
+	if len(t.connectedPeers) < t.maxCachedPeers {
 		t.addServerPeer(server, t.pendingPeers[node.ID].peerInfo)
 	} else {
 		t.addToQueue(t.pendingPeers[node.ID].peerInfo)
